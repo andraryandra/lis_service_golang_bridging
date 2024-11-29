@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  lis-golang-service:
+    build: .
+    container_name: lis-golang-service
+    ports:
+      - "8111:8111"
+    env_file:
+      - .env
+    networks:
+      - lis_golang_network
+
+networks:
+  lis_golang_network:
+    driver: bridge
