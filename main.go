@@ -8,12 +8,35 @@ import (
     "log"
     "net/http"
     "os"
+    "path/filepath"
+    "time"
 
     "github.com/go-chi/chi/v5"
     "github.com/go-chi/chi/v5/middleware"
     "github.com/go-playground/validator/v10"
     "github.com/joho/godotenv"
 )
+
+var validate *validator.Validate
+
+func initLogger() {
+    if _, err := os.Stat("logs"); os.IsNotExist(err) {
+        err := os.Mkdir("logs", 0755)
+        if err != nil {
+            log.Fatalf("Failed to create logs directory: %v", err)
+        }
+    }
+
+    logFile := filepath.Join("logs", fmt.Sprintf("log_%s.txt", time.Now().Format("2006-01-02")))
+    file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+    if err != nil {
+        log.Fatalf("Failed to open log file: %v", err)
+    }
+
+    multiWriter := io.MultiWriter(file, os.Stdout)
+    log.SetOutput(multiWriter)
+    log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+}
 
 // type ICD10 struct {
 //     Type string `json:"type,omitempty"`
@@ -67,11 +90,9 @@ type SimrsRequest struct {
     ClinicName        *string         `json:"clinic_name,omitempty"`
     OrderNote         *string         `json:"order_note,omitempty"`
     KategoriKunjungan *string         `json:"kategori_kunjungan,omitempty"`
-    ICD10             *interface{}        `json:"icd10,omitempty"`
+    ICD10             *interface{}    `json:"icd10,omitempty"`
     Order             []*Order        `json:"order" validate:"required,dive"`
 }
-
-var validate *validator.Validate
 
 type LISRequest struct {
     NoPendaftaran     *string         `json:"no_pendaftaran"`
@@ -99,7 +120,7 @@ type LISRequest struct {
     ClinicName        *string         `json:"clinic_name,omitempty"`
     OrderNote         *string         `json:"order_note,omitempty"`
     KategoriKunjungan *string         `json:"kategori_kunjungan,omitempty"`
-	ICD10			  *interface{}     `json:"icd10"`
+    ICD10			  *interface{}     `json:"icd10"`
     Order             []*Order        `json:"order"`
 }
 
@@ -165,6 +186,7 @@ func transformToLIS(simrs *SimrsRequest) *LISRequest {
     }
 }
 
+
 type SendToLisBridgingIn struct {
     request *LISRequest
     xSign   string
@@ -178,6 +200,7 @@ func sendToLISBridging(payload SendToLisBridgingIn) (map[string]interface{}, err
     var respBody map[string]interface{}
 
     if err != nil {
+        log.Printf("Error marshalling request: %v", err)
         return respBody, err
     }
 
@@ -185,6 +208,7 @@ func sendToLISBridging(payload SendToLisBridgingIn) (map[string]interface{}, err
 
     req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
     if err != nil {
+        log.Printf("Error creating request: %v", err)
         return respBody, err
     }
     req.Header.Set("Content-Type", "application/json")
@@ -194,6 +218,7 @@ func sendToLISBridging(payload SendToLisBridgingIn) (map[string]interface{}, err
     client := &http.Client{}
     resp, err := client.Do(req)
     if err != nil {
+        log.Printf("Error sending request: %v", err)
         return respBody, err
     }
     defer resp.Body.Close()
@@ -201,15 +226,18 @@ func sendToLISBridging(payload SendToLisBridgingIn) (map[string]interface{}, err
     // Log the response from the API
     err = json.NewDecoder(resp.Body).Decode(&respBody)
     if err != nil {
+        log.Printf("Error decoding response: %v", err)
         return respBody, err
     }
     log.Printf("Response from LIS bridging: %s", resp.Status)
     log.Printf("Response body: %v", respBody)
 
     if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+        log.Printf("Failed to send data to LIS bridging, status code: %d", resp.StatusCode)
         return respBody, fmt.Errorf("failed to send data to LIS bridging, status code: %d", resp.StatusCode)
     }
 
+    log.Printf("Successfully sent data to LIS bridging")
     return respBody, nil
 }
 
@@ -220,6 +248,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
     body, err := io.ReadAll(r.Body)
     if err != nil {
         http.Error(w, "Failed to read request body", http.StatusBadRequest)
+        log.Printf("Failed to read request body: %v", err)
         return
     }
     log.Printf("Incoming request body: %s", body)
@@ -261,13 +290,17 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
     // Respond with the transformed data
     w.Header().Set("Content-Type", "application/json")
     json.NewEncoder(w).Encode(respBody)
+    log.Printf("Successfully processed request and sent response")
+    // Log the response status
+    log.Printf("Response status: %d", http.StatusOK)
     log.Printf("\n------------------------------------------------------------------------------------------------------------------\n")
 
-    // Log the response status
-    log.Printf("Response status:\n %d", http.StatusOK)
 }
 
 func main() {
+    // Initialize the logger
+    initLogger()
+
     // Initialize the validator
     validate = validator.New()
 

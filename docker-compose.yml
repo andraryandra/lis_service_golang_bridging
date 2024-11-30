@@ -10,6 +10,10 @@ services:
       - .env
     networks:
       - lis_golang_network
+    volumes:
+      - ./logs:/app/logs
+    logging:
+      driver: "json-file"
 
 networks:
   lis_golang_network:
