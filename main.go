@@ -215,6 +215,8 @@ func sendToLISBridging(payload SendToLisBridgingIn) (map[string]interface{}, err
     req.Header.Set("x-sign", payload.xSign)
     req.Header.Set("x-cons", payload.xCons)
 
+    log.Printf("Request headers: %v", req.Header)
+
     client := &http.Client{}
     resp, err := client.Do(req)
     if err != nil {
@@ -270,14 +272,29 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
         return
     }
 
+    // Get x-sign and x-cons from headers or .env
+    xSign := r.Header.Get("x-sign")
+    if xSign == "" {
+        xSign = os.Getenv("X_SIGN")
+    }
+
+    xCons := r.Header.Get("x-cons")
+    if xCons == "" {
+        xCons = os.Getenv("X_CONS")
+    }
+
+    // Log the values of x-sign and x-cons
+    log.Printf("x-sign: %s", xSign)
+    log.Printf("x-cons: %s", xCons)
+
     // Transform SIMRS DTO to LIS DTO
     lisReq := transformToLIS(&simrsReq)
 
     // Send the transformed data to LIS bridging
     payload := SendToLisBridgingIn{
         request: lisReq,
-        xSign:   r.Header.Get("x-sign"),
-        xCons:   r.Header.Get("x-cons"),
+        xSign:   xSign,
+        xCons:   xCons,
     }
 
     respBody, err := sendToLISBridging(payload)
@@ -294,7 +311,6 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
     // Log the response status
     log.Printf("Response status: %d", http.StatusOK)
     log.Printf("\n------------------------------------------------------------------------------------------------------------------\n")
-
 }
 
 func main() {
