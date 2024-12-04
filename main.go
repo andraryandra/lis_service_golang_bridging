@@ -15,6 +15,8 @@ import (
     "github.com/go-chi/chi/v5/middleware"
     "github.com/go-playground/validator/v10"
     "github.com/joho/godotenv"
+    "crypto/tls"
+
 )
 
 var validate *validator.Validate
@@ -217,7 +219,10 @@ func sendToLISBridging(payload SendToLisBridgingIn) (map[string]interface{}, err
 
     log.Printf("Request headers: %v", req.Header)
 
-    client := &http.Client{}
+    tr := &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+	client := &http.Client{Transport: tr}
     resp, err := client.Do(req)
     if err != nil {
         log.Printf("Error sending request: %v", err)
@@ -244,22 +249,13 @@ func sendToLISBridging(payload SendToLisBridgingIn) (map[string]interface{}, err
 }
 
 func handleRequest(w http.ResponseWriter, r *http.Request) {
-    var simrsReq SimrsRequest
+    var simrsReq SimrsRequest = SimrsRequest{}
 
-    // Log the incoming request body
-    body, err := io.ReadAll(r.Body)
+    err := json.NewDecoder(r.Body).Decode(&simrsReq)
+
     if err != nil {
         http.Error(w, "Failed to read request body", http.StatusBadRequest)
         log.Printf("Failed to read request body: %v", err)
-        return
-    }
-    log.Printf("Incoming request body: %s", body)
-
-    // Decode the request body into the SimrsRequest struct
-    err = json.Unmarshal(body, &simrsReq)
-    if err != nil {
-        http.Error(w, "Invalid request payload", http.StatusBadRequest)
-        log.Printf("Invalid request payload: %v", err)
         return
     }
 
