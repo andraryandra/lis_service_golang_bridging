@@ -220,7 +220,10 @@ func sendToLISBridging(payload SendToLisBridgingIn) (map[string]interface{}, err
     log.Printf("Request headers: %v", req.Header)
 
     tr := &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		TLSClientConfig: &tls.Config{
+            InsecureSkipVerify: true,
+            ServerName:         "192.168.1.15",
+        },
 	}
 	client := &http.Client{Transport: tr}
     resp, err := client.Do(req)
