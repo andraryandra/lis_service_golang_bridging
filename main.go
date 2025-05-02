@@ -315,7 +315,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
                 },
                 "metaData": map[string]interface{}{
                     "message": msg,
-                    "code":    200,
+                    "code":    201,
                 },
             }
 
@@ -330,7 +330,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
             } else {
                 // Default to 200 if not a specific error or success message
                 statusCode = http.StatusOK // 200
-                response["metaData"].(map[string]interface{})["code"] = 200
+                response["metaData"].(map[string]interface{})["code"] = 201
             }
 
             // Update response with actual details from respBody
