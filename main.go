@@ -222,7 +222,6 @@ func sendToLISBridging(payload SendToLisBridgingIn) (map[string]interface{}, err
     tr := &http.Transport{
 		TLSClientConfig: &tls.Config{
             InsecureSkipVerify: true,
-            ServerName:         "192.168.1.15",
         },
 	}
 	client := &http.Client{Transport: tr}
@@ -303,13 +302,66 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Respond with the transformed data
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(respBody)
-    log.Printf("Successfully processed request and sent response")
-    // Log the response status
-    log.Printf("Response status: %d", http.StatusOK)
-    log.Printf("\n------------------------------------------------------------------------------------------------------------------\n")
+    // Cek kondisi pada metaData.message dan tentukan status code serta response
+    if metaData, ok := respBody["metaData"].(map[string]interface{}); ok {
+        if msg, ok := metaData["message"].(string); ok {
+            var statusCode int
+            response := map[string]interface{}{
+                "response": map[string]interface{}{
+                    "count":           0,
+                    "no_laboratorium": "-",
+                    "no_order":        "", // This will be set later if applicable
+                    "detail":          []interface{}{},
+                },
+                "metaData": map[string]interface{}{
+                    "message": msg,
+                    "code":    200,
+                },
+            }
+
+            // Check if message indicates success or failure
+            if msg == "Registration Failed, Parameters Not Mapped" || msg == "Registration successful" {
+                statusCode = http.StatusCreated // 201
+                response["metaData"].(map[string]interface{})["code"] = 201
+            } else if msg == "Error" || msg == "Not Found" || msg == "Registration Failed" {
+                // Set 404 status code for error messages
+                statusCode = http.StatusNotFound // 404
+                response["metaData"].(map[string]interface{})["code"] = 404
+            } else {
+                // Default to 200 if not a specific error or success message
+                statusCode = http.StatusOK // 200
+                response["metaData"].(map[string]interface{})["code"] = 200
+            }
+
+            // Update response with actual details from respBody
+            if respData, ok := respBody["response"].(map[string]interface{}); ok {
+                response["response"].(map[string]interface{})["no_order"] = respData["no_order"]
+                response["response"].(map[string]interface{})["detail"] = respData["detail"]
+            }
+
+            // Respond with the transformed data and the appropriate status
+            w.WriteHeader(statusCode)
+            w.Header().Set("Content-Type", "application/json")
+            json.NewEncoder(w).Encode(response)
+
+            log.Printf("Successfully processed request and sent response")
+            log.Printf("Response status: %d", statusCode)
+            log.Printf("\n------------------------------------------------------------------------------------------------------------------\n")
+            return
+        }
+    }
+
+
+    // If no valid message found, return 400 as fallback
+    http.Error(w, "Invalid response from LIS bridging", http.StatusBadRequest)
+
+    // // Respond with the transformed data
+    // w.Header().Set("Content-Type", "application/json")
+    // json.NewEncoder(w).Encode(respBody)
+    // log.Printf("Successfully processed request and sent response")
+    // // Log the response status
+    // log.Printf("Response status: %d", http.StatusOK)
+    // log.Printf("\n------------------------------------------------------------------------------------------------------------------\n")
 }
 
 func main() {
