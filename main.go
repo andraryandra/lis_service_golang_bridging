@@ -302,54 +302,66 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    // Cek kondisi pada metaData.message dan tentukan status code serta response
-    if metaData, ok := respBody["metaData"].(map[string]interface{}); ok {
-        if msg, ok := metaData["message"].(string); ok {
-            var statusCode int
-            response := map[string]interface{}{
-                "response": map[string]interface{}{
-                    "count":           0,
-                    "no_laboratorium": "-",
-                    "no_order":        "", // This will be set later if applicable
-                    "detail":          []interface{}{},
-                },
-                "metaData": map[string]interface{}{
-                    "message": msg,
-                    "code":    201,
-                },
-            }
+   // Cek kondisi pada metaData.message dan tentukan status code serta response
+    if metaDataRaw, ok := respBody["metaData"].(map[string]interface{}); ok {
+        message := fmt.Sprintf("%v", metaDataRaw["message"])
+        statusCode := http.StatusCreated
+        code := 201
 
-            // Check if message indicates success or failure
-            if msg == "Registration Failed, Parameters Not Mapped" || msg == "Registration successful" {
-                statusCode = http.StatusCreated // 201
-                response["metaData"].(map[string]interface{})["code"] = 201
-            } else if msg == "Error" || msg == "Not Found" || msg == "Registration Failed" {
-                // Set 404 status code for error messages
-                statusCode = http.StatusNotFound // 404
-                response["metaData"].(map[string]interface{})["code"] = 404
-            } else {
-                // Default to 200 if not a specific error or success message
-                statusCode = http.StatusOK // 200
-                response["metaData"].(map[string]interface{})["code"] = 201
-            }
-
-            // Update response with actual details from respBody
-            if respData, ok := respBody["response"].(map[string]interface{}); ok {
-                response["response"].(map[string]interface{})["no_order"] = respData["no_order"]
-                response["response"].(map[string]interface{})["detail"] = respData["detail"]
-            }
-
-            // Respond with the transformed data and the appropriate status
-            w.WriteHeader(statusCode)
-            w.Header().Set("Content-Type", "application/json")
-            json.NewEncoder(w).Encode(response)
-
-            log.Printf("Successfully processed request and sent response")
-            log.Printf("Response status: %d", statusCode)
-            log.Printf("\n------------------------------------------------------------------------------------------------------------------\n")
-            return
+        // Tentukan statusCode & code berdasarkan message
+        if message == "Registration Failed, Parameters Not Mapped" || message == "Registration successful" {
+            statusCode = http.StatusCreated // 201
+            code = 201
+        } else if message == "Error" || message == "Not Found" || message == "Registration Failed" {
+            statusCode = http.StatusNotFound // 404
+            code = 404
         }
+
+        // Ambil barcode langsung (terima apa adanya), jika tidak ada, beri nilai default
+        var barcode []interface{}
+        if raw, ok := metaDataRaw["barcode"].([]interface{}); ok {
+            barcode = raw
+        } else {
+            // Log jika barcode tidak ditemukan
+            log.Printf("Warning: Barcode not found in metaData. Returning empty array.")
+            barcode = []interface{}{} // Nilai default jika barcode tidak ada
+        }
+
+        // Siapkan FinalResponse
+        resp := FinalResponse{
+            MetaData: MetaData{
+                Message: message,
+                Code:    code,
+                Barcode: barcode,
+            },
+            Response: Response{
+                NoLaboratorium: "-",
+                NoOrder:        "",
+                Detail:         []interface{}{},
+            },
+        }
+
+        // Jika ada response data, ambil nilai dinamis
+        if respData, ok := respBody["response"].(map[string]interface{}); ok {
+            // Ambil `no_laboratorium` dan `no_order`
+            resp.Response.NoLaboratorium = fmt.Sprintf("%v", respData["no_laboratorium"])
+            resp.Response.NoOrder = fmt.Sprintf("%v", respData["no_order"])
+
+            // Ambil `detail` jika ada
+            if detail, ok := respData["detail"].([]interface{}); ok {
+                resp.Response.Detail = detail
+            }
+        }
+
+        // Kirim response ke client
+        w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(statusCode)
+        json.NewEncoder(w).Encode(resp)
+
+        log.Printf("Success response with status %d", statusCode)
+        return
     }
+
 
 
     // If no valid message found, return 400 as fallback
